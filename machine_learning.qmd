@@ -1,0 +1,133 @@
+---
+title: "Machine learning - 2022"
+author: "Anders Askeland"
+format:
+    html:
+        self-contained: true
+        code-fold: true
+jupyter: python3
+toc: true
+toc-depth: 3
+---
+# Course
+## 1. Lectures
+### Lecture 1 - ***
+TODO
+# Group work
+```{python}
+# )mports
+import pandas as pd
+import numpy as np
+from pandas import DataFrame
+import wfdb
+import ast
+
+# Functions
+def load_raw_data(df, sampling_rate, path):
+    if sampling_rate == 100:
+        data = [wfdb.rdsamp(path+f) for f in df.filename_lr]
+    else:
+        data = [wfdb.rdsamp(path+f) for f in df.filename_hr]
+    data = np.array([signal for signal, meta in data])
+    return data
+
+# Read data
+path = 'data-raw/'
+sampling_rate=100
+Y = pd.read_csv(path+'ptbxl_database.csv', index_col='ecg_id')
+Y.scp_codes = Y.scp_codes.apply(lambda x: ast.literal_eval(x))
+
+Y
+raw_ecg = wfdb.rdrecord("data-raw/records100/00000/00001_lr")
+wfdb.plot_wfdb(record=raw_ecg, title='Example signals')
+
+# Load raw signal data
+X = load_raw_data(Y, sampling_rate, path)
+pd.DataFrame.head(X[0][0])
+X[:10]
+# Load scp_statements.csv for diagnostic aggregation
+agg_df = pd.read_csv(path+'scp_statements.csv', index_col=0)
+agg_df = agg_df[agg_df.diagnostic == 1]
+
+def aggregate_diagnostic(y_dic):
+    tmp = []
+    for key in y_dic.keys():
+        if key in agg_df.index:
+            tmp.append(agg_df.loc[key].diagnostic_class)
+    return list(set(tmp))
+
+# Apply diagnostic superclass
+Y['diagnostic_superclass'] = Y.scp_codes.apply(aggregate_diagnostic)
+
+# Split data into train and test
+test_fold = 10
+# Train
+X_train = X[np.where(Y.strat_fold != test_fold)]
+y_train = Y[(Y.strat_fold != test_fold)].diagnostic_superclass
+# Test
+X_test = X[np.where(Y.strat_fold == test_fold)]
+y_test = Y[Y.strat_fold == test_fold].diagnostic_superclass
+
+
+```
+# Precourse work
+## 1. Hands on machine learning
+Notes and work from the book Hand on machine learning
+
+### Chapter 1 - Introduction to machine learning
+* A K nearest neigbors approach takes the average between neighbors (you define how many to use).
+
+#### Example data analysis
+
+```{python}
+# Imports
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import sklearn.linear_model
+import sklearn.neighbors
+
+# Load data
+oecd_bli = pd.read_csv("datasets/lifesat/oecd_bli_2015.csv", thousands=",")
+gdp_per_capita = pd.read_csv("datasets/lifesat/gdp_per_capita.csv", thousands=",", delimiter="\t", encoding="latin1", na_values="n/a")
+
+# Clean data
+oecd_bli = oecd_bli[oecd_bli["INEQUALITY"]=="TOT"]
+oecd_bli = oecd_bli.pivot(index="Country", columns="Indicator", values="Value")
+
+# Rename stuff
+gdp_per_capita.rename(columns={"2015": "GDP per capita"}, inplace=True)
+
+# Sex index
+gdp_per_capita.set_index("Country", inplace=True)
+
+# Join two datasets
+full_country_stats = pd.merge(left=oecd_bli, right=gdp_per_capita,
+                            left_index=True, right_index=True)
+full_country_stats.sort_values(by="GDP per capita", inplace=True)
+
+# Remove some stuff. Perhaps OECD and more
+remove_indices = [0, 1, 6, 8, 33, 34, 35]
+keep_indices = list(set(range(36)) - set(remove_indices))
+country_stats = full_country_stats[["GDP per capita", 'Life satisfaction']].iloc[keep_indices]
+
+X = np.c_[country_stats["GDP per capita"]]
+y = np.c_[country_stats["Life satisfaction"]]
+
+# Visualize the data
+country_stats.plot(kind='scatter', x="GDP per capita", y='Life satisfaction')
+plt.show()
+
+# Select a linear model
+model = sklearn.linear_model.LinearRegression()
+model_k = sklearn.neighbors.KNeighborsRegressor(n_neighbors=3)
+
+# Train model
+model.fit(X, y)
+model_k.fit(X, y)
+
+# Make prediction
+X_new = [[22587]]  # Cyprus' GDP per capita
+print(f"Cyprus GDP is predicted to be (linear): {model.predict(X_new)[0][0]}") # outputs [[ 5.96242338]]
+print(f"Cyprus GDP is predicted to be (neighbor): {model_k.predict(X_new)[0][0]}") # outputs [[ 5.96242338]]
+```
